@@ -1,0 +1,179 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * =========================
+ * Auth.js / NextAuth models
+ * =========================
+ */
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts Account[]
+  sessions Session[]
+
+  // App-specific
+  points Int @default(0)
+
+  // back-relations
+  householdsOwned Household[]  @relation("UserHouseholds") // Household.owner ↔ User.householdsOwned
+  choresOwned     Chore[]      @relation("UserChores") // Chore.owner ↔ User.choresOwned
+  assignments     Assignment[] @relation("UserAssignments") // Assignment.assignee ↔ User.assignments
+  completions     Completion[] @relation("UserCompletions") // Completion.user ↔ User.completions
+
+  memberships Membership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @map("refresh_token")
+  access_token      String? @map("access_token")
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * =========================
+ * App domain models
+ * =========================
+ */
+
+model Household {
+  id        String       @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User         @relation("UserHouseholds", fields: [ownerId], references: [id])
+  members   Membership[]
+  chores    Chore[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+enum Role {
+  PARENT
+  CHILD
+}
+
+model Membership {
+  id          String @id @default(cuid())
+  userId      String
+  householdId String
+  role        Role
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, householdId])
+  @@index([householdId, role])
+}
+
+enum Frequency {
+  daily
+  weekly
+  monthly
+  once
+}
+
+enum Difficulty {
+  EASY // Хялбар
+  MEDIUM // Дунд
+  HARD // Хүнд
+}
+
+enum RotationMode {
+  NONE
+  KIDS_ROUND_ROBIN
+}
+
+model Chore {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  frequency   Frequency
+  points      Int        @default(1)
+  price       Int        @default(0)
+  difficulty  Difficulty @default(EASY)
+
+  ownerId String
+  owner   User   @relation("UserChores", fields: [ownerId], references: [id])
+
+  rotationMode RotationMode @default(NONE)
+
+  assignments Assignment[]
+  completions Completion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([householdId, title], name: "householdId_title")
+}
+
+enum AssignStatus {
+  PENDING
+  DONE
+  SKIPPED
+}
+
+model Assignment {
+  id         String       @id @default(cuid())
+  choreId    String
+  assigneeId String
+  dueDate    DateTime
+  status     AssignStatus @default(PENDING)
+
+  chore    Chore @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  assignee User  @relation("UserAssignments", fields: [assigneeId], references: [id])
+
+  @@index([assigneeId, dueDate])
+  @@index([choreId, dueDate])
+}
+
+model Completion {
+  id      String   @id @default(cuid())
+  choreId String
+  userId  String
+  doneAt  DateTime @default(now())
+
+  chore Chore @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserCompletions", fields: [userId], references: [id])
+
+  @@index([userId, doneAt])
+}
