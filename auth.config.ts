@@ -1,7 +1,7 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { db } from "@/lib/prisma";
+import { db } from "./lib/prisma"; // alias ажиллахгүй бол relative зам
 
 export const authOptions: NextAuthConfig = {
   adapter: PrismaAdapter(db),
@@ -13,17 +13,6 @@ export const authOptions: NextAuthConfig = {
   ],
   secret: process.env.AUTH_SECRET,
   session: { strategy: "database" },
-  callbacks: {
-    async session({ session, user }) {
-      if (session.user) {
-        (session.user as any).id = user.id;
-        (session.user as any).points = (user as any).points ?? 0;
-        (session.user as any).isAdmin =
-          session.user.email === process.env.ADMIN_EMAIL;
-      }
-      return session;
-    },
-  },
 };
 
 export const { auth, handlers } = NextAuth(authOptions);
